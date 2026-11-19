@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Nodule Report Scoring</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a reading desk. The report stays in view (sticky) while the scorecard beside it
+   shows only what is left to score; scored items fold into compact chips. One column on a phone,
+   with the report pinned in a short scrollable strip at the top. */
+:root {
+  --bg: #f3f5f7; --surface: #ffffff; --ink: #18222d; --muted: #5d6b79; --line: #d9e0e6;
+  --accent: #1f5f8b; --accent-soft: #e3eef6; --ok: #1c7a4f; --ok-soft: #e1f3e9; --warn: #9a5b00;
+  --sel: #1f5f8b; --sel-ink: #ffffff;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-report: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #1a2027; --ink: #e4e9ee; --muted: #9aa7b3; --line: #2e3740;
+    --accent: #7fb6dc; --accent-soft: #1d3142; --ok: #7fd1a6; --ok-soft: #173326; --warn: #f0b660;
+    --sel: #7fb6dc; --sel-ink: #0f1a24; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #1a2027; --ink: #e4e9ee; --muted: #9aa7b3; --line: #2e3740;
+  --accent: #7fb6dc; --accent-soft: #1d3142; --ok: #7fd1a6; --ok-soft: #173326; --warn: #f0b660;
+  --sel: #7fb6dc; --sel-ink: #0f1a24; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-ui); }
+.app { max-width: 1320px; margin: 0 auto; padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+.top { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; justify-content: space-between; }
+.top p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.who { display: flex; gap: 8px; align-items: center; }
+.who label { font-size: 13px; color: var(--muted); }
+input[type=text], textarea { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+input[type=text] { width: 180px; }
+textarea { width: 100%; min-height: 60px; resize: vertical; }
+button { font: inherit; cursor: pointer; }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 7px 12px; font-weight: 500; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--sel-ink); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:focus-visible, .score button:focus-visible, .rlist button:focus-visible, .chip:focus-visible, .linkbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+kbd { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); }
+.supplied { margin: 16px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.supplied b { font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 2px; }
+.supplied q { font-family: var(--font-report); }
+details.help { margin: 0 0 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+details.help summary { cursor: pointer; font-weight: 600; }
+details.help ul { margin: 8px 0 2px; padding-left: 20px; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.progress { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-bottom: 12px; font-size: 14px; color: var(--muted); }
+.bar { flex: 1 1 200px; height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; min-width: 120px; }
+.bar span { display: block; height: 100%; background: var(--ok); width: 0; transition: width .2s; }
+.layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; align-items: start; }
+.rlist { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); display: flex; flex-direction: column; gap: 3px; max-height: calc(100vh - 24px); overflow: auto; }
+.rlist button { display: flex; justify-content: space-between; align-items: center; gap: 6px; text-align: left; border: 1px solid transparent; background: transparent; color: var(--ink); border-radius: 7px; padding: 5px 9px; font-family: var(--font-mono); font-size: 13px; }
+.rlist button.on { background: var(--surface); border-color: var(--line); font-weight: 600; }
+.rlist .st { font-family: var(--font-ui); font-size: 11.5px; color: var(--muted); }
+.rlist .st.done { color: var(--ok); font-weight: 600; }
+.desk { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.panel header { padding: 11px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.panel h2 { font-size: 15px; margin: 0; }
+.panel header small { color: var(--muted); font-weight: 400; font-size: 13px; }
+/* The report stays in view while scoring. */
+.reportPanel { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 24px); display: flex; flex-direction: column; }
+.report { padding: 14px 18px; font-family: var(--font-report); font-size: 15px; line-height: 1.55; overflow: auto; min-height: 0; }
+.report h3, .report h4, .report h5, .report h6 { font-family: var(--font-ui); font-size: 14.5px; margin: 12px 0 4px; }
+.report p { margin: 4px 0; }
+.report ul, .report ol { margin: 4px 0; padding-left: 22px; }
+.report hr { border: none; border-top: 1px solid var(--line); margin: 10px 0; }
+.card { padding: 4px 16px 16px; }
+.linkbtn { border: none; background: none; color: var(--accent); padding: 0; font-size: 13px; font-weight: 500; }
+.cat { margin-top: 14px; }
+.cat h3 { font-size: 13.5px; margin: 0 0 4px; display: flex; justify-content: space-between; gap: 8px; }
+.cat h3 span { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+.item { padding: 9px 10px; margin: 0 -10px; border: 1.5px solid transparent; border-radius: 9px; }
+.item + .item { margin-top: 2px; }
+.item.active { border-color: var(--accent); background: var(--accent-soft); }
+.item .lab { font-size: 14px; margin-bottom: 6px; display: flex; justify-content: space-between; gap: 10px; cursor: pointer; }
+.item .hint { font-size: 12px; color: var(--accent); white-space: nowrap; font-weight: 600; }
+.score { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.score button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 7px; padding: 6px 0; font-family: var(--font-mono); font-weight: 600; font-size: 14px; min-width: 0; }
+.score button:hover { border-color: var(--accent); }
+.score button.on { background: var(--sel); border-color: var(--sel); color: var(--sel-ink); }
+.ends { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); font-size: 11px; color: var(--muted); margin-top: 3px; text-align: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.chip { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 99px; padding: 2px 9px; font-size: 12.5px; max-width: 100%; text-align: left; }
+.chip b { font-family: var(--font-mono); color: var(--accent); margin-left: 4px; }
+.alldone { margin-top: 14px; padding: 12px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); font-weight: 500; }
+.notes { margin-top: 14px; }
+.notes label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+.nav { display: flex; gap: 8px; justify-content: space-between; margin-top: 14px; flex-wrap: wrap; }
+.export { margin-top: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.export h2 { font-size: 15px; margin: 0 0 4px; }
+.export p { margin: 2px 0 10px; color: var(--muted); font-size: 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.msg { font-size: 13.5px; color: var(--muted); }
+.msg.ok { color: var(--ok); }
+.msg.warn { color: var(--warn); }
+.csvbox { margin-top: 10px; font-family: var(--font-mono); font-size: 12px; min-height: 140px; }
+.confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; padding: 8px 10px; border: 1px solid var(--warn); border-radius: 8px; }
+@media (max-width: 1000px) {
+  .desk { grid-template-columns: 1fr; }
+  .reportPanel { max-height: 40vh; z-index: 2; box-shadow: 0 6px 14px -10px rgba(0,0,0,.4); }
+}
+@media (max-width: 700px) {
+  .layout { grid-template-columns: 1fr; }
+  .rlist { position: static; flex-direction: row; flex-wrap: wrap; max-height: none; }
+  .rlist button { padding: 4px 8px; }
+  .keys { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }
+</style>
+
+<div class="app">
+  <div class="top">
+    <div>
+      <h1>Nodule Report Scoring</h1>
+      <p>Score each AI-written report against the supplied information only. Reports are blinded: the model that wrote each one is not shown.</p>
+    </div>
+    <div class="who">
+      <label for="reviewer">Reviewer</label>
+      <input type="text" id="reviewer" placeholder="Name or initials" autocomplete="off">
+    </div>
+  </div>
+
+  <div class="supplied"><b>Supplied information (identical for every report)</b><q id="prompt"></q></div>
+
+  <details class="help">
+    <summary>How to score</summary>
+    <ul>
+      <li>Score every item from <b>1</b> (fails) to <b>5</b> (fully meets); <b>3</b> is partly met, for example a section that exists but is incomplete.</li>
+      <li>Judge only against the supplied information above. The AI had no images: anything it states that is not in the supplied information, including normal findings such as “no pleural effusion”, counts as unsupported.</li>
+      <li>Placeholders left for the radiologist (for example “[specify segment]”) and questions to the reader are not statements.</li>
+      <li>Fidelity items are phrased so that 5 means the report is free of the problem.</li>
+      <li>Scored items fold into chips; click a chip to change its score. Everything saves in this browser as you go. When you finish, download or copy the CSV and send it back.</li>
+    </ul>
+  </details>
+
+  <div class="keys" aria-label="Keyboard shortcuts">
+    <span><kbd>1</kbd>–<kbd>5</kbd> score the highlighted item</span>
+    <span><kbd>↑</kbd><kbd>↓</kbd> move between items</span>
+    <span><kbd>←</kbd><kbd>→</kbd> previous / next report</span>
+    <span><kbd>Enter</kbd> next report when done</span>
+    <span><kbd>Backspace</kbd> clear a score</span>
+  </div>
+
+  <div class="progress">
+    <span id="progText"></span>
+    <div class="bar" aria-hidden="true"><span id="progBar"></span></div>
+  </div>
+
+  <div class="layout">
+    <nav class="rlist" id="rlist" aria-label="Reports"></nav>
+    <div class="desk">
+      <section class="panel reportPanel" aria-labelledby="rTitle">
+        <header><h2 id="rTitle"></h2><small id="rWords"></small></header>
+        <div class="report" id="report"></div>
+      </section>
+      <section class="panel" aria-label="Scorecard">
+        <header><h2>Scorecard <small id="cardCount"></small></h2><button class="linkbtn" id="toggleAll" type="button"></button></header>
+        <div class="card">
+          <div id="card"></div>
+          <div class="notes">
+            <label for="note">Notes on this report (optional)</label>
+            <textarea id="note" placeholder="Anything that the scores don't capture"></textarea>
+          </div>
+          <div class="nav">
+            <button class="btn" id="prev" type="button">← Previous report</button>
+            <button class="btn primary" id="next" type="button">Next report →</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="export">
+    <h2>Send your scores</h2>
+    <p>One row per scored item (scale 1–5), with your reviewer name, the blinded report ID and your notes.</p>
+    <div class="row">
+      <button class="btn primary" id="dl" type="button">Download CSV</button>
+      <button class="btn" id="copy" type="button">Copy CSV</button>
+      <button class="btn" id="show" type="button">Show CSV</button>
+      <button class="btn" id="clear" type="button">Clear all scores</button>
+      <span class="msg" id="msg" role="status"></span>
+    </div>
+    <div class="confirm" id="confirm" hidden>
+      <span>Delete every score and note saved in this browser? This can't be undone.</span>
+      <button class="btn" id="clearYes" type="button">Delete all</button>
+      <button class="btn" id="clearNo" type="button">Keep them</button>
+    </div>
+    <textarea class="csvbox" id="csvbox" readonly hidden aria-label="CSV"></textarea>
+  </section>
+</div>
+
+<script>
+const DATA = {"prompt": "70-year-old man, never smoked. Chest CT for chronic cough. Single 7 mm solid nodule, right lower lobe, smooth margins. No prior CT. Write the report.", "reports": [{"id": "R01", "html": "<p><strong>CT CHEST</strong></p>\n<p><strong>Indication:</strong> Chronic cough.</p>\n<p><strong>Comparison:</strong> No prior CT available.</p>\n<p><strong>Findings:</strong>  </p>\n<p>Solitary 7 mm solid pulmonary nodule in the right lower lobe with smooth margins.</p>\n<p><strong>Impression:</strong>  </p>\n<p>Indeterminate 7 mm right lower lobe solid pulmonary nodule. Recommend follow-up low-dose noncontrast chest CT in 6\u201312 months. If stable, consider additional follow-up CT at 18\u201324 months, per Fleischner Society guidelines for a low-risk patient.</p>", "words": 61}, {"id": "R02", "html": "<h3>CT CHEST REPORT</h3>\n<p><strong>EXAMINATION:</strong> CT chest [with / without] IV contrast</p>\n<p><strong>CLINICAL INDICATION:</strong> 70-year-old man with chronic cough. Never smoker.</p>\n<p><strong>COMPARISON:</strong> None available.</p>\n<p><strong>TECHNIQUE:</strong> Axial CT images of the chest were acquired [with / without] intravenous contrast. Multiplanar reformats were reviewed. Nodule measured on thin-section ([\u22641.5] mm) lung windows.</p>\n<hr>\n<h4>FINDINGS</h4>\n<p><strong>Lungs and airways:</strong></p>\n<ul>\n<li>Single <strong>7 mm solid pulmonary nodule</strong> in the right lower lobe ([segment], series [X], image [Y]), with smooth, well-circumscribed margins. Measurement is the average of long- and short-axis diameters ([__] \u00d7 [__] mm). No calcification, cavitation, or internal fat identified.</li>\n<li>No additional pulmonary nodules.</li>\n<li>[No consolidation, ground-glass opacity, bronchiectasis, bronchial wall thickening, air trapping, or interstitial abnormality.]</li>\n<li>[No emphysema.]</li>\n<li>Central airways are patent.</li>\n</ul>\n<p><strong>Pleura:</strong> [No pleural effusion, thickening, or pneumothorax.]</p>\n<p><strong>Mediastinum and hila:</strong> [No mediastinal or hilar lymphadenopathy. Heart size normal. No pericardial effusion. Thoracic aorta and main pulmonary artery normal in caliber.]</p>\n<p><strong>Upper abdomen (limited):</strong> [No acute abnormality.]</p>\n<p><strong>Bones and soft tissues:</strong> [No suspicious osseous lesion. Degenerative changes of the thoracic spine.]</p>\n<hr>\n<h4>IMPRESSION</h4>\n<ol>\n<li><strong>Solitary 7 mm smooth, solid nodule in the right lower lobe.</strong> Likely benign given smooth margins, lower-lobe location, and never-smoking history. However, malignancy cannot be excluded on a single study without priors.</li>\n</ol>\n<ul>\n<li><strong>Recommendation (Fleischner Society 2017, single solid nodule 6\u20138 mm):</strong> Follow-up non-contrast low-dose chest CT in <strong>6\u201312 months</strong>, then consider CT at <strong>18\u201324 months</strong> if stable. Age 70 is a recognized risk factor, so the 18\u201324 month study should be considered.</li>\n<li>If any prior chest or abdominal CT becomes available, please forward it for comparison. Documented stability over 2 years would obviate further follow-up.</li>\n</ul>\n<ol>\n<li>[No CT finding to explain chronic cough.] Consider clinical evaluation for common non-structural causes (upper airway cough syndrome, asthma, GERD, ACE inhibitor use) as clinically appropriate.</li>\n</ol>\n<hr>\n<h5>Notes for the ordering clinician / editor</h5>\n<ul>\n<li><strong>Bracketed fields</strong> are placeholders for findings not provided. Please confirm or replace them with actual observations. In particular, the cough workup depends on whether bronchiectasis, airway disease, or interstitial changes are present.</li>\n<li><strong>Fleischner applicability:</strong> These guidelines apply to incidentally detected nodules in adults \u226535 years without known malignancy or immunocompromise. If this patient has a cancer history, is immunosuppressed, or has had prior lung disease, management should be individualized.</li>\n<li><strong>Optional risk quantification:</strong> A Brock (PanCan) model estimate can be added if desired. For this profile (age 70, solid 7 mm, lower lobe, single nodule, no spiculation, no emphysema), it would be expected to be low, roughly &lt;2%. Verify with the calculator using actual patient inputs, including sex and family history.</li>\n</ul>", "words": 434}, {"id": "R03", "html": "<h3>CT Chest Report</h3>\n<p><strong>EXAMINATION:</strong> CT chest [without/with] IV contrast</p>\n<p><strong>CLINICAL HISTORY:</strong> 70-year-old man, never-smoker, with chronic cough.</p>\n<p><strong>COMPARISON:</strong> None available.</p>\n<p><strong>TECHNIQUE:</strong> Axial CT images of the chest were acquired [without/with __ mL IV contrast]. Multiplanar reformats were reviewed. Thin-section [__ mm] images were used for nodule assessment.</p>\n<hr>\n<h5>FINDINGS</h5>\n<p><strong>Lungs:</strong> A single solid pulmonary nodule in the right lower lobe [__ segment] measures 7 mm (average of long and short axis) [series __, image __]. Margins are smooth. There is no calcification, cavitation, fat, or ground-glass component. No other pulmonary nodules. [No consolidation, interstitial abnormality, bronchiectasis, or air trapping. / Describe if present.]</p>\n<p><strong>Airways:</strong> [Central airways are patent. No bronchial wall thickening, mucus plugging, or endobronchial lesion.]</p>\n<p><strong>Pleura:</strong> [No pleural effusion, thickening, or pneumothorax.]</p>\n<p><strong>Mediastinum and hila:</strong> [No lymphadenopathy by size criteria. Esophagus unremarkable; no patulous esophagus or hiatal hernia.]</p>\n<p><strong>Heart and vessels:</strong> [Heart size normal. No pericardial effusion. Note coronary artery calcification if present.]</p>\n<p><strong>Upper abdomen (limited):</strong> [No acute abnormality in the visualized upper abdomen.]</p>\n<p><strong>Bones and soft tissues:</strong> [No suspicious osseous lesion.]</p>\n<hr>\n<h5>IMPRESSION</h5>\n<ol>\n<li><strong>Solitary 7 mm solid nodule in the right lower lobe with smooth margins.</strong> This is indeterminate, and no prior imaging is available to assess stability. Per the 2017 Fleischner Society guidelines for a single solid nodule of 6\u20138 mm, <strong>CT chest is recommended at 6\u201312 months, then a CT at 18\u201324 months should be considered.</strong> If any prior chest imaging exists, comparison is recommended because 2-year stability would obviate further follow-up. Final interval should reflect the clinical risk assessment. Never-smoking status, smooth margins, and lower-lobe location favor lower risk, while age is a risk factor.</li>\n<li>[No CT finding to explain chronic cough. / State relevant findings, e.g., bronchiectasis, airway thickening, hiatal hernia.] The nodule is unlikely to account for the patient's cough.</li>\n</ol>\n<hr>\n<p><strong>Notes on the report:</strong></p>\n<ul>\n<li>The bracketed fields need to be completed from the actual images. I did not invent findings that weren't provided.</li>\n<li>The Fleischner guidelines apply because this is an incidental nodule in a patient over 35 with no known cancer or immunosuppression. Lung-RADS does not apply because this is not a screening study.</li>\n<li>If you have a history of malignancy or immunosuppression, the recommendation would change.</li>\n</ul>", "words": 375}, {"id": "R04", "html": "<p><strong>CT CHEST</strong></p>\n<p><strong>Indication:</strong> Chronic cough. Never-smoker.</p>\n<p><strong>Comparison:</strong> No prior CT available.</p>\n<p><strong>Findings:</strong>  </p>\n<p>Solitary 7 mm solid pulmonary nodule in the right lower lobe with smooth margins.</p>\n<p><strong>Impression:</strong>  </p>\n<p>Indeterminate 7 mm solid right lower lobe pulmonary nodule. Recommend follow-up low-dose noncontrast chest CT in 6\u201312 months. If stable, consider an additional CT at 18\u201324 months, per Fleischner Society guidelines for a low-risk patient.</p>", "words": 62}, {"id": "R05", "html": "<h3>CT CHEST REPORT</h3>\n<p><strong>EXAMINATION:</strong> CT Chest [without / with] IV contrast</p>\n<p><strong>CLINICAL INDICATION:</strong> 70-year-old male with chronic cough. Never smoker.</p>\n<p><strong>COMPARISON:</strong> None available.</p>\n<p><strong>TECHNIQUE:</strong> Helical CT of the chest from the thoracic inlet through the adrenal glands, with [no IV contrast / ___ mL IV contrast]. Axial images were reconstructed at [___] mm, with multiplanar reformats. [Expiratory images were / were not obtained.] Dose-reduction techniques were used.</p>\n<hr>\n<h4>FINDINGS</h4>\n<p><strong>Lungs and Pleura:</strong></p>\n<ul>\n<li>Single <strong>7 mm solid pulmonary nodule</strong> in the <strong>right lower lobe</strong> [segment: ___], (series ___, image ___). Margins are smooth and well circumscribed. No spiculation, cavitation, or internal calcification. [Fat: absent.]</li>\n<li>No other pulmonary nodules.</li>\n<li>[No consolidation, ground-glass opacity, interstitial abnormality, or bronchiectasis.]</li>\n<li>[No pleural effusion or pneumothorax.]</li>\n</ul>\n<p><strong>Airways:</strong></p>\n<ul>\n<li>[Central airways are patent. No bronchial wall thickening or endobronchial lesion.]</li>\n<li>[No mosaic attenuation or air trapping.]</li>\n</ul>\n<p><strong>Mediastinum and Hila:</strong></p>\n<ul>\n<li>[No mediastinal, hilar, or axillary lymphadenopathy.]</li>\n<li>[Heart size normal. No pericardial effusion.]</li>\n<li>[Thoracic aorta normal in caliber.]</li>\n<li>[Esophagus unremarkable. No hiatal hernia.]</li>\n</ul>\n<p><strong>Upper Abdomen (limited):</strong></p>\n<ul>\n<li>[No acute abnormality in the visualized upper abdomen. Adrenal glands normal.]</li>\n</ul>\n<p><strong>Bones and Soft Tissues:</strong></p>\n<ul>\n<li>[No suspicious osseous lesion. Degenerative changes of the thoracic spine as expected for age.]</li>\n</ul>\n<hr>\n<h4>IMPRESSION</h4>\n<ol>\n<li><strong>Solitary 7 mm solid, smoothly marginated nodule in the right lower lobe.</strong> It is indeterminate, but low-risk features are present (never smoker, smooth margins, lower lobe location).</li>\n</ol>\n<p>   <strong>Recommendation (Fleischner Society 2017, single solid nodule 6\u20138 mm):</strong> Follow-up non-contrast low-dose chest CT in <strong>6\u201312 months</strong>. If stable, consider a further CT at <strong>18\u201324 months</strong>.</p>\n<ol>\n<li>[No CT findings to explain chronic cough. / Alternative finding: ___.]</li>\n</ol>\n<hr>\n<h5>Notes for finalizing</h5>\n<ul>\n<li><strong>Verify the measurement.</strong> Fleischner sizing uses the average of the long and short axes on the same image, rounded to the nearest millimeter. If the average falls below 6 mm, the recommendation changes to no routine follow-up for a low-risk patient.</li>\n<li><strong>Check that Fleischner applies.</strong> The guidelines do not apply if the patient has a known malignancy, is immunocompromised, or meets lung-cancer screening criteria (Lung-RADS would apply instead).</li>\n<li><strong>Consider other risk factors.</strong> Age 70 is itself a risk factor. If there is significant occupational exposure (asbestos, radon, uranium), family history of lung cancer, or emphysema or fibrosis, treat as high risk. The interval is the same, but the 18\u201324 month scan becomes recommended rather than optional.</li>\n<li><strong>Fill in all bracketed fields</strong> with the actual findings. They are placeholders and should not be signed as written.</li>\n<li><strong>If the cough workup is the main concern</strong> and no cause is seen, the referring clinician may want to consider non-pulmonary causes such as upper airway cough syndrome, asthma, GERD, or ACE-inhibitor use. This could go in a comment if your practice allows.</li>\n</ul>", "words": 466}, {"id": "R06", "html": "<p><strong>CT CHEST</strong></p>\n<p><strong>Indication:</strong> Chronic cough.</p>\n<p><strong>Comparison:</strong> None available.</p>\n<p><strong>Findings:</strong>  </p>\n<p>Solitary 7 mm solid pulmonary nodule in the right lower lobe with smooth margins.</p>\n<p><strong>Impression:</strong>  </p>\n<p>7 mm solid right lower lobe pulmonary nodule. Recommend follow-up chest CT in 6\u201312 months; if stable, consider an additional CT at 18\u201324 months, per Fleischner Society guidelines for a low-risk patient. These recommendations assume no known malignancy or immunosuppression.</p>", "words": 64}, {"id": "R07", "html": "<h3>CT CHEST REPORT</h3>\n<p><strong>EXAMINATION:</strong> CT Chest [with / without] IV contrast</p>\n<p><strong>CLINICAL INDICATION:</strong> 70-year-old male with chronic cough. Never-smoker.</p>\n<p><strong>COMPARISON:</strong> None available.</p>\n<p><strong>TECHNIQUE:</strong> Axial CT images of the chest were acquired [with / without] intravenous contrast. Multiplanar reformations were reviewed. [Dose reduction technique statement per institutional protocol.]</p>\n<hr>\n<h4>FINDINGS</h4>\n<p><strong>Lungs and pleura:</strong></p>\n<p>There is a single solid pulmonary nodule in the right lower lobe [segment], measuring 7 mm (average of long- and short-axis diameters; [__ x __ mm]), [series __, image __]. Margins are smooth. [No internal calcification or macroscopic fat identified.] No additional pulmonary nodules are identified.</p>\n<p>[No consolidation, ground-glass opacity, or interstitial abnormality.]</p>\n<p>[No bronchiectasis, bronchial wall thickening, or mucoid impaction.]</p>\n<p>[No mosaic attenuation.] <em>(Consider expiratory imaging if air trapping is clinically suspected.)</em></p>\n<p>[No emphysema.]</p>\n<p>[No pleural effusion or pneumothorax.]</p>\n<p><strong>Airways:</strong></p>\n<p>[Trachea and central bronchi are patent without endoluminal lesion or tracheobronchomalacia.]</p>\n<p><strong>Mediastinum and hila:</strong></p>\n<p>[No mediastinal or hilar lymphadenopathy.] [Heart size normal. No pericardial effusion.] [Thoracic aorta and main pulmonary artery normal in caliber.] [Esophagus unremarkable; no hiatal hernia or patulous esophagus.]</p>\n<p><strong>Chest wall and lower neck:</strong></p>\n<p>[Unremarkable. Thyroid unremarkable.]</p>\n<p><strong>Upper abdomen (limited):</strong></p>\n<p>[No acute abnormality in the visualized upper abdomen.]</p>\n<p><strong>Bones:</strong></p>\n<p>[No suspicious osseous lesion. Degenerative changes of the thoracic spine.]</p>\n<hr>\n<h4>IMPRESSION</h4>\n<ol>\n<li><strong>Solitary 7 mm solid pulmonary nodule, right lower lobe, with smooth margins.</strong> Indeterminate, but low suspicion for malignancy given smooth margins, lower-lobe location, and never-smoking history.</li>\n</ol>\n<p>   <strong>Recommendation (Fleischner Society 2017, solitary solid nodule 6\u20138 mm):</strong> Follow-up non-contrast CT chest in <strong>6\u201312 months</strong>, then consider CT at <strong>18\u201324 months</strong> if stable. Stability over this interval would support a benign etiology.</p>\n<ol>\n<li>[No CT explanation for chronic cough identified.] <em>or</em> [List relevant findings, e.g., bronchiectasis, airway disease, hiatal hernia.]</li>\n</ol>\n<hr>\n<h5>Notes for finalizing</h5>\n<ul>\n<li><strong>Bracketed items are placeholders.</strong> Only the nodule details were provided, so the other organ-system findings must be confirmed from the actual images before signing.</li>\n<li><strong>Fleischner applicability:</strong> These guidelines apply to incidental nodules in patients \u226535 years. They do not apply to patients with known malignancy, immunosuppression, or lung cancer screening exams (use Lung-RADS for screening). Revise the recommendation if any of these apply.</li>\n<li><strong>Risk stratification:</strong> Most features here favor low risk. Age 70 is a modest risk factor, and any family history of lung cancer, occupational exposure (e.g., asbestos, radon), or emphysema/fibrosis would shift toward high risk. For a 6\u20138 mm nodule the timing is the same either way (6\u201312 months, then 18\u201324 months). The 18\u201324 month scan is \"consider\" for low risk and recommended for high risk.</li>\n<li><strong>Perifissural nodule:</strong> If the nodule is triangular or lentiform and attached to a fissure, consistent with an intrapulmonary lymph node, follow-up may not be needed. Revise the impression if so.</li>\n<li><strong>Calcification:</strong> If a benign calcification pattern (central, diffuse, laminated, or popcorn) is present, the nodule is benign and needs no follow-up.</li>\n</ul>", "words": 477}, {"id": "R08", "html": "<h3>CT CHEST</h3>\n<p><strong>CLINICAL INDICATION:</strong> 70-year-old male, never smoker, with chronic cough.</p>\n<p><strong>TECHNIQUE:</strong> [Axial CT images of the chest were acquired without/with IV contrast. Multiplanar reformats were reviewed. Specify dose/protocol per institutional standard.]</p>\n<p><strong>COMPARISON:</strong> None available.</p>\n<hr>\n<h4>FINDINGS</h4>\n<p><strong>Lungs and Airways:</strong></p>\n<p>A single <strong>7 mm solid pulmonary nodule</strong> is present in the <strong>right lower lobe</strong> [specify segment, e.g., posterior basal; series/image #]. It has smooth, well-circumscribed margins. [No calcification or macroscopic fat identified.]</p>\n<p>No additional pulmonary nodules. [No consolidation, ground-glass opacity, interstitial abnormality, bronchiectasis, bronchial wall thickening, or mosaic attenuation.] Central airways are patent.</p>\n<p><strong>Pleura:</strong> [No pleural effusion, thickening, or pneumothorax.]</p>\n<p><strong>Mediastinum and Hila:</strong> [No mediastinal, hilar, or axillary lymphadenopathy by size criteria. Thyroid unremarkable.]</p>\n<p><strong>Heart and Vessels:</strong> [Heart size normal. No pericardial effusion. Thoracic aorta normal in caliber. Note coronary artery calcification if present.]</p>\n<p><strong>Esophagus:</strong> [Unremarkable. Note hiatal hernia or patulous esophagus if present, as relevant to cough.]</p>\n<p><strong>Upper Abdomen (limited):</strong> [No acute abnormality in visualized structures.]</p>\n<p><strong>Bones and Soft Tissues:</strong> [No suspicious osseous lesion. Degenerative changes of the thoracic spine as expected for age.]</p>\n<hr>\n<h4>IMPRESSION</h4>\n<ol>\n<li><strong>Solitary 7 mm smooth solid nodule, right lower lobe.</strong> Indeterminate, with low-risk morphology (smooth margins, lower lobe location) in a never-smoker.</li>\n</ol>\n<p>   <strong>Recommendation (Fleischner Society 2017):</strong> Follow-up <strong>non-contrast low-dose chest CT in 6\u201312 months</strong>, then consider CT at <strong>18\u201324 months</strong>. If stable at 2 years, no further imaging is needed.</p>\n<ol>\n<li>[No CT finding to explain chronic cough. <em>Or</em> specify a relevant finding, e.g., bronchiectasis, airway thickening, or hiatal hernia.]</li>\n</ol>\n<hr>\n<h5>Notes for finalization</h5>\n<ul>\n<li><strong>Fill in the bracketed sections</strong> to reflect the actual findings. I have not assumed the rest of the study is normal.</li>\n<li><strong>Fleischner applicability:</strong> The guideline applies to incidentally detected nodules in patients \u226535 years without known malignancy or immunosuppression. If the patient has a cancer history, use a cancer-specific surveillance pathway instead.</li>\n<li><strong>Risk stratification:</strong> Age 70 is itself a risk factor (as in the Brock model). If other risk factors exist, such as family history of lung cancer, asbestos/radon exposure, emphysema, or fibrosis, classify as high risk. For a single 6\u20138 mm solid nodule, the first follow-up interval is the same (6\u201312 months), but the 18\u201324 month scan becomes recommended rather than optional.</li>\n<li><strong>Calcification:</strong> If benign calcification (diffuse, central, laminated, or popcorn) or fat is present on review, the nodule can be called benign and no follow-up is needed.</li>\n<li><strong>Chronic cough:</strong> A 7 mm peripheral nodule is unlikely to explain the cough. Clinical workup for common causes (upper airway cough syndrome, asthma, GERD, ACE inhibitor use) should proceed independently.</li>\n</ul>", "words": 429}, {"id": "R09", "html": "<h3>CT CHEST</h3>\n<p><strong>CLINICAL INDICATION:</strong> 70-year-old male, never-smoker, with chronic cough.</p>\n<p><strong>TECHNIQUE:</strong> [Non-contrast / contrast-enhanced] helical CT of the chest, [slice thickness] mm axial images with multiplanar reformats. [Insert contrast agent/volume if applicable.]</p>\n<p><strong>COMPARISON:</strong> None available.</p>\n<hr>\n<h5>FINDINGS</h5>\n<p><strong>Lungs and pleura:</strong></p>\n<ul>\n<li>A single <strong>7 mm solid pulmonary nodule</strong> in the <strong>right lower lobe</strong> [specify segment], series [__] image [__]. The margins are smooth. No internal calcification, cavitation, or fat is identified. [Confirm whether 7 mm is the mean of long- and short-axis diameters, per Fleischner convention.]</li>\n<li>No other pulmonary nodules.</li>\n<li>[Describe airways: bronchial wall thickening, bronchiectasis, mucus plugging, mosaic attenuation / air trapping (if expiratory images obtained).]</li>\n<li>[Describe parenchyma: emphysema, interstitial abnormality, consolidation, atelectasis.]</li>\n<li>[Pleura: effusion, thickening, pneumothorax.]</li>\n</ul>\n<p><strong>Mediastinum and hila:</strong> [Lymph nodes, short-axis measurements of any enlarged nodes.] [Thyroid, esophagus, e.g., hiatal hernia or patulous esophagus.]</p>\n<p><strong>Heart and vessels:</strong> [Heart size, pericardium, coronary calcification, aortic and pulmonary artery caliber.]</p>\n<p><strong>Upper abdomen (limited):</strong> [Findings.]</p>\n<p><strong>Bones and soft tissues:</strong> [Findings.]</p>\n<hr>\n<h5>IMPRESSION</h5>\n<ol>\n<li><strong>Solitary 7 mm solid, smoothly marginated nodule in the right lower lobe</strong>, indeterminate. Smooth margins, lower-lobe location, and never-smoking history are favorable features. However, malignancy cannot be excluded without demonstrating stability.</li>\n</ol>\n<p>   <strong>Recommendation (Fleischner Society 2017, solid nodule 6\u20138 mm):</strong></p>\n<ul>\n<li><strong>Non-contrast chest CT in 6\u201312 months.</strong></li>\n<li>If stable, consider a further CT at 18\u201324 months, depending on overall clinical risk assessment.</li>\n</ul>\n<p>   <em>The recommended interval should be chosen by the referring clinician based on the patient's full risk profile (for example, family history of lung cancer, occupational or radon exposure, prior malignancy). Fleischner guidelines apply to incidental nodules in patients \u226535 years without known malignancy or immunocompromise.</em></p>\n<ol>\n<li>[Findings relevant to chronic cough, for example airway disease, bronchiectasis, interstitial abnormality, or \"No CT correlate for chronic cough identified.\"]</li>\n</ol>\n<hr>\n<p><strong>Notes on use:</strong></p>\n<ul>\n<li>The bracketed fields are placeholders for findings you didn't provide. They should be completed from the actual images rather than defaulted to \"normal.\"</li>\n<li>If any old imaging exists (including outside CTs or abdominal CTs that include the lung bases), obtaining it is worthwhile. Two or more years of stability for a solid nodule would obviate further follow-up.</li>\n<li>If the nodule is subsolid or part-solid on review, or if spiculation is present, the recommendations change.</li>\n</ul>", "words": 378}, {"id": "R10", "html": "<p><strong>CT CHEST</strong></p>\n<p><strong>Indication:</strong> Chronic cough. Never smoker.</p>\n<p><strong>Comparison:</strong> None available.</p>\n<p><strong>Findings:</strong>  </p>\n<p>Solitary 7 mm solid pulmonary nodule in the right lower lobe with smooth margins.</p>\n<p><strong>Impression:</strong>  </p>\n<p>7 mm solid right lower lobe pulmonary nodule. Recommend follow-up low-dose noncontrast chest CT in 6\u201312 months. If stable, consider an additional CT at 18\u201324 months, per Fleischner Society guidelines for a low-risk patient.</p>", "words": 60}, {"id": "R11", "html": "<p><strong>CT CHEST</strong></p>\n<p><strong>Comparison:</strong> No prior chest CT available.</p>\n<p><strong>Findings:</strong>  </p>\n<p>Solitary 7 mm solid pulmonary nodule in the right lower lobe with smooth margins.</p>\n<p><strong>Impression:</strong>  </p>\n<p>Indeterminate 7 mm right lower lobe solid pulmonary nodule. Recommend follow-up low-dose noncontrast chest CT in 6\u201312 months. If stable, consider an additional CT at 18\u201324 months, per Fleischner Society guidelines.</p>", "words": 55}, {"id": "R12", "html": "<p><strong>CT CHEST</strong></p>\n<p><strong>Comparison:</strong> No prior CT available.</p>\n<p><strong>Findings:</strong>  </p>\n<p>Solitary 7 mm solid pulmonary nodule in the right lower lobe with smooth margins.</p>\n<p><strong>Impression:</strong>  </p>\n<p>7 mm solid right lower lobe pulmonary nodule. Recommend follow-up chest CT in <strong>6\u201312 months</strong>; if stable, consider an additional CT at <strong>18\u201324 months</strong>, per Fleischner Society guidelines for a low-risk patient.</p>", "words": 55}, {"id": "R13", "html": "<p><strong>CT CHEST</strong></p>\n<p><strong>Indication:</strong> Chronic cough.</p>\n<p><strong>Comparison:</strong> None available.</p>\n<p><strong>Findings:</strong>  </p>\n<p>Solitary 7 mm solid pulmonary nodule in the right lower lobe with smooth margins.</p>\n<p><strong>Impression:</strong>  </p>\n<p>Indeterminate 7 mm solid right lower lobe pulmonary nodule. Recommend follow-up chest CT without contrast in 6\u201312 months. If stable, consider an additional CT at 18\u201324 months, per Fleischner Society guidelines for a low-risk patient.</p>", "words": 59}, {"id": "R14", "html": "<h3>CT CHEST REPORT</h3>\n<p><strong>EXAMINATION:</strong> CT chest [with / without] IV contrast</p>\n<p><strong>CLINICAL INDICATION:</strong> 70-year-old male, never-smoker, with chronic cough.</p>\n<p><strong>COMPARISON:</strong> None available.</p>\n<p><strong>TECHNIQUE:</strong> Axial CT images of the chest were obtained [with / without] intravenous contrast. Multiplanar reformats were reviewed. [Slice thickness: ___ mm.] [Dose reduction technique statement per institutional protocol.]</p>\n<hr>\n<h4>FINDINGS</h4>\n<p><strong>Lungs and airways:</strong></p>\n<p>There is a solitary <strong>7 mm solid pulmonary nodule</strong> in the right lower lobe, [___ segment] (series ___, image ___). Margins are smooth. No internal calcification or fat is identified. No cavitation.</p>\n<p>[No additional pulmonary nodules.]</p>\n<p>[Comment on findings relevant to chronic cough: bronchial wall thickening, bronchiectasis, mosaic attenuation, air trapping (if expiratory images obtained), interstitial abnormality, consolidation, or none.]</p>\n<p>The central airways are [patent].</p>\n<p><strong>Pleura:</strong> [No pleural effusion or pneumothorax.]</p>\n<p><strong>Mediastinum and hila:</strong> [No mediastinal or hilar lymphadenopathy.] [Heart size normal. No pericardial effusion.]</p>\n<p><strong>Vessels:</strong> [Thoracic aorta normal in caliber.] [Pulmonary arteries normal in caliber.]</p>\n<p><strong>Esophagus:</strong> [Unremarkable. No hiatal hernia / patulous esophagus.]</p>\n<p><strong>Upper abdomen (limited):</strong> [No acute abnormality.]</p>\n<p><strong>Bones and soft tissues:</strong> [No suspicious osseous lesion.]</p>\n<hr>\n<h4>IMPRESSION</h4>\n<ol>\n<li><strong>Solitary 7 mm solid nodule in the right lower lobe with smooth margins.</strong> Nonspecific, with no prior imaging to establish stability.</li>\n</ol>\n<ul>\n<li>Per <strong>Fleischner Society 2017 guidelines</strong> (single solid nodule 6\u20138 mm): <strong>recommend follow-up non-contrast CT chest in 6\u201312 months</strong>, then consider CT at 18\u201324 months depending on risk assessment.</li>\n<li>Features favoring lower risk: never-smoker, smooth margins, lower lobe location. Advanced age is a risk factor. Final risk stratification should incorporate additional history (family history of lung cancer, occupational/radon exposure, emphysema or fibrosis).</li>\n<li>If prior chest imaging becomes available, comparison is recommended. Documented stability over 2 years would obviate further follow-up.</li>\n</ul>\n<ol>\n<li>[No CT findings to explain chronic cough. / Findings as above may contribute to chronic cough.] [Consider common non-pulmonary causes, such as upper airway cough syndrome, asthma, GERD, or ACE-inhibitor use, as clinically appropriate.]</li>\n</ol>\n<hr>\n<p><strong>Notes for finalizing:</strong></p>\n<ul>\n<li>Bracketed items are placeholders. Replace them with actual findings. I did not assume any findings beyond those you provided.</li>\n<li>The nodule size should reflect the average of long- and short-axis diameters on the same image (Fleischner convention), rounded to the nearest mm.</li>\n<li>Fleischner guidelines apply to incidental nodules in patients \u226535 years without known malignancy or immunosuppression. Lung-RADS does not apply, since this is not a screening exam.</li>\n<li>If the nodule has any part-solid or ground-glass component, different follow-up intervals apply.</li>\n</ul>", "words": 407}, {"id": "R15", "html": "<p><strong>CT CHEST</strong></p>\n<p><strong>Indication:</strong> Chronic cough. Never smoker.  </p>\n<p><strong>Comparison:</strong> None available.</p>\n<p><strong>Findings:</strong>  </p>\n<p>Solitary 7 mm solid pulmonary nodule in the right lower lobe with smooth margins.</p>\n<p><strong>Impression:</strong>  </p>\n<p>Indeterminate 7 mm right lower lobe solid pulmonary nodule. Recommend follow-up low-dose noncontrast chest CT in 6\u201312 months. If stable, consider an additional CT at 18\u201324 months, per Fleischner Society guidelines.</p>", "words": 57}, {"id": "R16", "html": "<p><strong>CT CHEST</strong></p>\n<p><strong>Indication:</strong> Chronic cough.</p>\n<p><strong>Comparison:</strong> No prior CT available.</p>\n<p><strong>Findings:</strong>  </p>\n<p>Solitary 7 mm solid pulmonary nodule in the right lower lobe with smooth margins.</p>\n<p><strong>Impression:</strong>  </p>\n<p>7 mm solid right lower lobe pulmonary nodule. Recommend follow-up low-dose noncontrast chest CT in 6\u201312 months. If stable, consider an additional CT at 18\u201324 months, per Fleischner Society guidelines for a low-risk patient.</p>", "words": 60}, {"id": "R17", "html": "<h3>CT CHEST</h3>\n<p><strong>CLINICAL INDICATION:</strong> 70-year-old male, never-smoker, with chronic cough.</p>\n<p><strong>TECHNIQUE:</strong> [Non-contrast / contrast-enhanced] multidetector CT of the chest from the thoracic inlet through the upper abdomen. Axial images with [thickness] mm reconstructions; coronal and sagittal reformats. [Dose/DLP per institutional protocol.]</p>\n<p><strong>COMPARISON:</strong> None available.</p>\n<p><strong>FINDINGS:</strong></p>\n<p><strong>Lungs and pleura:</strong></p>\n<p>There is a single solid pulmonary nodule in the right lower lobe [segment, series/image number], measuring 7 mm (average of long- and short-axis diameters [__ x __ mm]). Margins are smooth. No internal fat or calcification. No cavitation. No other pulmonary nodules.</p>\n<p>[No consolidation, ground-glass opacity, interstitial abnormality, or mosaic attenuation.]</p>\n<p>[No pleural effusion or pneumothorax.]</p>\n<p><strong>Airways:</strong></p>\n<p>[Central airways are patent. No bronchiectasis, bronchial wall thickening, mucus plugging, or endobronchial lesion.]</p>\n<p><strong>Mediastinum and hila:</strong></p>\n<p>[No mediastinal, hilar, or axillary lymphadenopathy by size criteria.] [Heart size normal. No pericardial effusion.] [Thoracic aorta and main pulmonary artery normal in caliber.] [Esophagus unremarkable; no hiatal hernia.]</p>\n<p><strong>Upper abdomen (limited):</strong></p>\n<p>[No acute abnormality in the visualized upper abdomen.]</p>\n<p><strong>Bones and soft tissues:</strong></p>\n<p>[No suspicious osseous lesion. Degenerative changes of the thoracic spine as expected for age.]</p>\n<p><strong>IMPRESSION:</strong></p>\n<ol>\n<li>Solitary 7 mm smooth solid nodule in the right lower lobe. No prior imaging for comparison. Per Fleischner Society 2017 guidelines for a single solid nodule 6\u20138 mm, <strong>recommend follow-up non-contrast chest CT in 6\u201312 months.</strong></li>\n</ol>\n<ul>\n<li>If low risk: consider additional CT at 18\u201324 months.</li>\n<li>If high risk: CT at 18\u201324 months.</li>\n<li>Smooth margins and lower-lobe location favor benignity. However, risk should be assigned clinically: never-smoking status lowers risk, while age, family history, and occupational or environmental exposures (e.g., asbestos, radon) may raise it.</li>\n</ul>\n<ol>\n<li>[No CT explanation for chronic cough identified / list relevant findings, e.g., bronchiectasis, airway thickening, hiatal hernia, interstitial changes.]</li>\n</ol>\n<hr>\n<p><strong>Notes before finalizing:</strong></p>\n<ul>\n<li>Bracketed items are placeholders. Replace them with the actual findings. Nothing beyond the nodule was provided, so normals should not be assumed.</li>\n<li>Fleischner guidelines apply to incidental nodules in patients \u226535 years without known cancer or immunosuppression. If the patient has a history of malignancy, follow oncologic imaging pathways instead.</li>\n<li>Confirm the measurement on thin-section (\u22641.5 mm) images. Report the average diameter, rounded to the nearest millimeter.</li>\n<li>If the cough workup reveals findings suggesting infection or inflammation, a short-interval follow-up (e.g., 3 months) may be reasonable to assess for resolution. Specify this if applicable.</li>\n</ul>", "words": 392}, {"id": "R18", "html": "<h3>CT CHEST REPORT</h3>\n<p><strong>PATIENT:</strong> [Name] | <strong>MRN:</strong> [ ] | <strong>DOB:</strong> [ ] | <strong>Age/Sex:</strong> 70 M</p>\n<p><strong>EXAM DATE:</strong> [ ] | <strong>ACCESSION:</strong> [ ]</p>\n<p><strong>REFERRING PROVIDER:</strong> [ ]</p>\n<hr>\n<p><strong>EXAMINATION:</strong> CT chest [without / with] intravenous contrast</p>\n<p><strong>CLINICAL INDICATION:</strong> Chronic cough. Never-smoker.</p>\n<p><strong>TECHNIQUE:</strong> Axial CT images of the chest were acquired [without / following administration of __ mL ___ IV contrast]. Multiplanar reformats and maximum intensity projection (MIP) images were reviewed. Slice thickness: [\u22641.5 mm recommended for nodule assessment]. Dose-reduction techniques were used.</p>\n<p><strong>COMPARISON:</strong> None available.</p>\n<hr>\n<p><strong>FINDINGS:</strong></p>\n<p><strong>Lungs and Airways:</strong></p>\n<ul>\n<li><strong>Pulmonary nodule:</strong> Solitary solid nodule in the right lower lobe, [segment], measuring 7 mm (average of long and short axis: __ \u00d7 __ mm), series __ image __. Smooth, well-circumscribed margins. No spiculation, cavitation, or [calcification / macroscopic fat].</li>\n<li>No additional pulmonary nodules.</li>\n<li>[Airways: patent central airways; no bronchiectasis, bronchial wall thickening, or mucus plugging / describe if present]</li>\n<li>[Mosaic attenuation / air trapping: none / describe]</li>\n<li>[Interstitial abnormality: none / describe]</li>\n<li>[Emphysema: none / describe]</li>\n<li>No consolidation.</li>\n</ul>\n<p><strong>Pleura:</strong> No pleural effusion or pneumothorax. [No pleural thickening.]</p>\n<p><strong>Mediastinum and Hila:</strong> No mediastinal, hilar, or axillary lymphadenopathy by size criteria. [Esophagus: unremarkable / patulous / hiatal hernia.]</p>\n<p><strong>Heart and Great Vessels:</strong> [Normal heart size. No pericardial effusion. Coronary artery calcification: none / mild / moderate / severe.] [Thoracic aorta normal caliber.]</p>\n<p><strong>Upper Abdomen (limited):</strong> [Unremarkable / describe.]</p>\n<p><strong>Bones and Soft Tissues:</strong> [No suspicious osseous lesions. Degenerative changes of the thoracic spine.]</p>\n<hr>\n<p><strong>IMPRESSION:</strong></p>\n<ol>\n<li><strong>Solitary 7 mm solid nodule in the right lower lobe with smooth margins.</strong> Low-suspicion morphology. Per Fleischner Society 2017 guidelines for an incidental solitary solid nodule of 6\u20138 mm, <strong>recommend follow-up non-contrast chest CT in 6\u201312 months, then consider CT at 18\u201324 months</strong> if stable.</li>\n</ol>\n<ol>\n<li>[No CT findings to explain chronic cough / Findings relevant to cough: ___ ]</li>\n</ol>\n<ol>\n<li>[Additional findings, e.g., coronary artery calcification, as applicable.]</li>\n</ol>\n<hr>\n<p><strong>Radiologist:</strong> [Name, credentials]</p>\n<p><strong>Electronically signed:</strong> [Date/Time]</p>\n<hr>\n<h5>Notes for finalizing</h5>\n<ul>\n<li><strong>Bracketed fields</strong> need actual findings. I haven't filled in anything you didn't provide.</li>\n<li><strong>Fleischner applicability:</strong> These guidelines apply to incidental nodules in patients \u226535 years. They do <strong>not</strong> apply if the patient has a known or prior malignancy, is immunocompromised, or is in a lung cancer screening program (use Lung-RADS instead). Confirm none of these apply.</li>\n<li><strong>Risk stratification:</strong> Never-smoking, smooth margins, and lower-lobe location favor low risk. Age 70 adds some risk. For a 6\u20138 mm solid nodule, the initial step (CT at 6\u201312 months) is the same in both risk categories. Risk mainly affects whether the 18\u201324 month scan is \"consider\" or \"recommended,\" so the wording above fits either case.</li>\n<li><strong>Calcification:</strong> If the nodule has a benign calcification pattern (diffuse, central, laminated, or popcorn) or macroscopic fat (hamartoma), no follow-up is needed. Revise the impression accordingly.</li>\n<li><strong>Cough correlation:</strong> Comment specifically on findings relevant to chronic cough, such as bronchiectasis, airway wall thickening, air trapping, ILD, a patulous esophagus or hiatal hernia (reflux/aspiration), or tracheobronchomalacia. If expiratory images weren't obtained and airway disease is suspected clinically, you could suggest them.</li>\n</ul>", "words": 519}, {"id": "R19", "html": "<p><strong>CT CHEST</strong></p>\n<p><strong>Indication:</strong> Chronic cough.</p>\n<p><strong>Comparison:</strong> No prior CT available.</p>\n<p><strong>Findings:</strong>  </p>\n<p>Solitary 7 mm solid pulmonary nodule in the right lower lobe with smooth margins.</p>\n<p><strong>Impression:</strong>  </p>\n<p>7 mm solid right lower lobe pulmonary nodule. Recommend follow-up low-dose noncontrast chest CT in 6\u201312 months. If stable, consider an additional CT at 18\u201324 months, per Fleischner Society guidelines for a low-risk patient.</p>", "words": 60}, {"id": "R20", "html": "<h3>CT CHEST</h3>\n<p><strong>CLINICAL INDICATION:</strong> 70-year-old male, never-smoker, with chronic cough.</p>\n<p><strong>COMPARISON:</strong> None available.</p>\n<p><strong>TECHNIQUE:</strong> Helical CT of the chest [with / without] intravenous contrast. Axial images reconstructed at [1.0-1.5] mm slice thickness with multiplanar reformats in lung and soft tissue windows.</p>\n<hr>\n<h4>FINDINGS</h4>\n<p><strong>Lungs and airways:</strong></p>\n<p>Single solid pulmonary nodule in the right lower lobe, [segment], measuring 7 mm (average of long and short axis; [__ x __ mm]) (series [__], image [__]). Margins are smooth and well circumscribed. No spiculation, cavitation, or internal fat. [No calcification identified.]</p>\n<p>No other pulmonary nodules. No consolidation, ground-glass opacity, or interstitial abnormality. [No bronchiectasis or bronchial wall thickening. No mosaic attenuation.] Central airways are patent. No emphysema.</p>\n<p><strong>Pleura:</strong> No pleural effusion, thickening, or pneumothorax.</p>\n<p><strong>Mediastinum and hila:</strong> No mediastinal or hilar lymphadenopathy by size criteria. Heart size is normal. No pericardial effusion. [Thoracic aorta normal in caliber.] [Esophagus unremarkable; no hiatal hernia.]</p>\n<p><strong>Chest wall and bones:</strong> No suspicious osseous lesion. [Degenerative changes of the thoracic spine.]</p>\n<p><strong>Upper abdomen (limited):</strong> [No acute abnormality in the visualized upper abdomen.]</p>\n<hr>\n<h4>IMPRESSION</h4>\n<ol>\n<li><strong>Solitary 7 mm solid nodule in the right lower lobe with smooth margins</strong>, indeterminate. No prior imaging is available to assess stability.</li>\n</ol>\n<ul>\n<li><strong>Recommendation (Fleischner Society 2017, solitary solid nodule 6-8 mm):</strong> Follow-up non-contrast low-dose chest CT in <strong>6-12 months</strong>. If stable, consider a further CT at <strong>18-24 months</strong>. The second follow-up is more strongly advised if the patient is judged higher risk; age is a risk factor even in a never-smoker.</li>\n<li>If prior chest imaging exists elsewhere (including CT abdomen that covered the lung bases), comparison is recommended. Two years of stability would establish benignity.</li>\n</ul>\n<ol>\n<li>[No CT finding to account for chronic cough.] <em>or</em> [Describe relevant finding, e.g., bronchiectasis, airway wall thickening, mosaic attenuation, hiatal hernia/patulous esophagus.]</li>\n</ol>\n<hr>\n<p><strong>Notes for finalizing:</strong></p>\n<ul>\n<li>Fill in the bracketed fields from the actual images. I only had the nodule details, so the other findings above are default normals that must be confirmed or replaced.</li>\n<li>Fleischner guidelines apply to incidental nodules in patients 35 or older without known malignancy or immunosuppression. If the patient has a cancer history or is immunocompromised, follow-up should be individualized.</li>\n<li>Lung-RADS does not apply, since this is not a screening exam and the patient does not meet screening eligibility.</li>\n<li>If the patient has strong risk factors (e.g., family history of lung cancer, occupational exposure), a 6-month first follow-up within the 6-12 month window is reasonable.</li>\n</ul>", "words": 412}], "rubric": [{"name": "Organization", "definition": "Required sections, in order", "items": [{"id": "org_title", "label": "Title naming the examination"}, {"id": "org_clinical_information", "label": "Clinical information / indication section"}, {"id": "org_technique", "label": "Technique section"}, {"id": "org_comparison", "label": "Comparison section (prior studies available or not)"}, {"id": "org_findings", "label": "Findings section"}, {"id": "org_impression", "label": "Impression section"}, {"id": "org_recommendation", "label": "Recommendation section"}, {"id": "org_order", "label": "Sections in conventional order"}]}, {"name": "Completeness", "definition": "No omitted findings or descriptors", "items": [{"id": "comp_age_sex", "label": "States age (70) and sex (male)"}, {"id": "comp_smoking", "label": "States never-smoker status"}, {"id": "comp_indication", "label": "States the indication (chronic cough)"}, {"id": "comp_comparison_status", "label": "States that there is no prior CT"}, {"id": "comp_size", "label": "Nodule size: 7 mm"}, {"id": "comp_attenuation", "label": "Attenuation: solid"}, {"id": "comp_number", "label": "Number: single"}, {"id": "comp_location", "label": "Location: right lower lobe"}, {"id": "comp_margins", "label": "Margins: smooth"}, {"id": "comp_risk_category", "label": "States the patient's risk category"}, {"id": "comp_followup_correct", "label": "Follow-up matches Fleischner 2017 (CT at 6\u201312 months, then consider 18\u201324 months)"}, {"id": "comp_guideline_cited", "label": "Names the guideline"}]}, {"name": "Fidelity", "definition": "No fabricated or altered content", "items": [{"id": "fid_other_findings", "label": "Free of findings about other structures (pleura, nodes, airways, heart\u2026)"}, {"id": "fid_global_normal", "label": "Free of \u201crest of the study is normal\u201d statements"}, {"id": "fid_nodule_details", "label": "Free of nodule details not supplied (calcification, fat, segment\u2026)"}, {"id": "fid_technique", "label": "Free of technique details not supplied (contrast, reconstructions\u2026)"}, {"id": "fid_clinical_history", "label": "Free of clinical history stated as fact"}, {"id": "fid_altered_facts", "label": "Free of changes to supplied facts"}, {"id": "fid_wrong_guideline", "label": "Uses the right guideline (not Lung-RADS)"}, {"id": "fid_unsupported_recommendation", "label": "Free of unsupported recommendations"}]}]};
+const KEY = "nodule-human-review-v2";   // v2: 1–5 scale (v1 used 1–10)
+const SCALE = 5;
+const ANCHORS = ["fails", "", "partly", "", "fully meets"];
+const ITEMS = DATA.rubric.flatMap(c => c.items.map(i => ({...i, category: c.name})));
+const $ = id => document.getElementById(id);
+
+let state = { reviewer: "", current: 0, scores: {}, notes: {}, times: {} };
+try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) state = {...state, ...s}; } catch (e) {}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+let active = null;        // item id that keys 1–5 score
+let showAll = false;      // show scored items in full instead of chips
+const rid = () => DATA.reports[state.current].id;
+const scoresOf = id => state.scores[id] || {};
+const scored = id => Object.keys(scoresOf(id)).length;
+const firstUnscored = (from = -1) => {
+  const s = scoresOf(rid());
+  for (let k = 1; k <= ITEMS.length; k++) {
+    const it = ITEMS[(from + k + ITEMS.length) % ITEMS.length];
+    if (s[it.id] == null) return it.id;
+  }
+  return null;
+};
+
+function renderList() {
+  const nav = $("rlist");
+  nav.innerHTML = "";
+  DATA.reports.forEach((r, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    const n = scored(r.id), done = n === ITEMS.length;
+    b.className = i === state.current ? "on" : "";
+    b.innerHTML = `<span>${r.id}</span><span class="st ${done ? "done" : ""}">${done ? "done" : n ? n + "/" + ITEMS.length : ""}</span>`;
+    if (i === state.current) b.setAttribute("aria-current", "true");
+    b.onclick = () => go(i);
+    nav.appendChild(b);
+  });
+}
+
+function renderProgress() {
+  const total = DATA.reports.length * ITEMS.length;
+  const n = DATA.reports.reduce((a, r) => a + scored(r.id), 0);
+  const done = DATA.reports.filter(r => scored(r.id) === ITEMS.length).length;
+  $("progText").textContent = `${done} of ${DATA.reports.length} reports complete · ${n} of ${total} items scored`;
+  $("progBar").style.width = (total ? n / total * 100 : 0) + "%";
+}
+
+function renderReport() {
+  const r = DATA.reports[state.current];
+  $("rTitle").textContent = `Report ${r.id}`;
+  $("rWords").textContent = `${r.words} words`;
+  $("report").innerHTML = r.html;
+  $("report").scrollTop = 0;
+  $("note").value = state.notes[r.id] || "";
+  $("prev").disabled = state.current === 0;
+  $("next").disabled = state.current === DATA.reports.length - 1;
+  active = firstUnscored();
+  renderCard();
+}
+
+function itemRow(it, value) {
+  const row = document.createElement("div");
+  row.className = "item" + (it.id === active ? " active" : "");
+  row.id = "it-" + it.id;
+  const lab = document.createElement("div");
+  lab.className = "lab";
+  lab.innerHTML = `<span id="l-${it.id}"></span>${it.id === active ? '<span class="hint">press 1–5</span>' : ""}`;
+  lab.firstChild.textContent = it.label;
+  lab.onclick = () => { active = it.id; renderCard(); };
+  row.appendChild(lab);
+  const g = document.createElement("div");
+  g.className = "score";
+  g.setAttribute("role", "radiogroup");
+  g.setAttribute("aria-labelledby", `l-${it.id}`);
+  for (let k = 1; k <= SCALE; k++) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = k;
+    b.className = value === k ? "on" : "";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", value === k ? "true" : "false");
+    b.onclick = () => setScore(it.id, k);
+    g.appendChild(b);
+  }
+  row.appendChild(g);
+  row.insertAdjacentHTML("beforeend", `<div class="ends">${ANCHORS.map(a => `<span>${a}</span>`).join("")}</div>`);
+  return row;
+}
+
+function renderCard() {
+  const s = scoresOf(rid());
+  const n = scored(rid());
+  $("cardCount").textContent = `${n} of ${ITEMS.length} scored`;
+  $("toggleAll").textContent = showAll ? "Fold scored items" : `Show scored items (${n})`;
+  $("toggleAll").hidden = n === 0;
+  const card = $("card");
+  card.innerHTML = "";
+  DATA.rubric.forEach(c => {
+    const open = c.items.filter(it => showAll || s[it.id] == null || it.id === active);
+    const done = c.items.filter(it => !showAll && s[it.id] != null && it.id !== active);
+    const sec = document.createElement("div");
+    sec.className = "cat";
+    const left = c.items.filter(it => s[it.id] == null).length;
+    sec.innerHTML = `<h3>${c.name}<span>${left ? left + " left · " : ""}${c.definition}</span></h3>`;
+    open.forEach(it => sec.appendChild(itemRow(it, s[it.id])));
+    if (done.length) {
+      const chips = document.createElement("div");
+      chips.className = "chips";
+      done.forEach(it => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "chip";
+        b.title = "Change this score";
+        b.textContent = it.label;
+        b.insertAdjacentHTML("beforeend", `<b>${s[it.id]}</b>`);
+        b.onclick = () => { active = it.id; renderCard(); };
+        chips.appendChild(b);
+      });
+      sec.appendChild(chips);
+    }
+    card.appendChild(sec);
+  });
+  if (n === ITEMS.length && !active) {
+    card.insertAdjacentHTML("beforeend", `<div class="alldone">All ${ITEMS.length} items scored.${state.current < DATA.reports.length - 1 ? " Press Enter or Next report to continue." : " This was the last report: send your scores below."}</div>`);
+  }
+  const a = active && $("it-" + active);
+  if (a) a.scrollIntoView({ block: "nearest" });
+}
+
+function setScore(item, k) {
+  const id = rid();
+  state.scores[id] = state.scores[id] || {};
+  state.times[id] = state.times[id] || {};
+  state.scores[id][item] = k;
+  state.times[id][item] = new Date().toISOString();
+  save();
+  // Move to the next item that still needs a score.
+  active = firstUnscored(ITEMS.findIndex(it => it.id === item));
+  renderCard(); renderList(); renderProgress();
+}
+
+function clearScore(item) {
+  const id = rid();
+  if (state.scores[id]) delete state.scores[id][item];
+  save(); renderCard(); renderList(); renderProgress();
+}
+
+function moveActive(step) {
+  // Move among the items that are shown in full (unscored ones, or all when expanded).
+  const s = scoresOf(rid());
+  const shown = ITEMS.filter(it => showAll || s[it.id] == null || it.id === active).map(it => it.id);
+  if (!shown.length) return;
+  const i = shown.indexOf(active);
+  active = shown[(i < 0 ? 0 : i + step + shown.length) % shown.length];
+  renderCard();
+}
+
+function go(i) {
+  if (i < 0 || i >= DATA.reports.length) return;
+  state.current = i;
+  showAll = false;
+  save(); renderList(); renderReport(); renderProgress();
+}
+
+document.addEventListener("keydown", ev => {
+  const t = ev.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;  // typing a name or a note
+  if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  if (/^[1-5]$/.test(ev.key) && active) { setScore(active, Number(ev.key)); ev.preventDefault(); }
+  else if (ev.key === "ArrowDown") { moveActive(1); ev.preventDefault(); }
+  else if (ev.key === "ArrowUp") { moveActive(-1); ev.preventDefault(); }
+  else if (ev.key === "ArrowRight") { go(state.current + 1); ev.preventDefault(); }
+  else if (ev.key === "ArrowLeft") { go(state.current - 1); ev.preventDefault(); }
+  else if (ev.key === "Enter" && scored(rid()) === ITEMS.length && !(t && t.tagName === "BUTTON")) { go(state.current + 1); ev.preventDefault(); }
+  else if (ev.key === "Backspace" && active) { clearScore(active); ev.preventDefault(); }
+});
+
+function csv() {
+  const esc = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const rows = [["reviewer", "report_id", "category", "item_id", "item", "score", "scale_max", "scored_at", "report_note"]];
+  DATA.reports.forEach(r => {
+    const s = scoresOf(r.id), t = state.times[r.id] || {};
+    ITEMS.forEach(it => {
+      if (s[it.id] != null) rows.push([state.reviewer, r.id, it.category, it.id, it.label, s[it.id], SCALE, t[it.id] || "", state.notes[r.id] || ""]);
+    });
+  });
+  return rows.map(r => r.map(esc).join(",")).join("\n") + "\n";
+}
+
+function msg(t, cls) { $("msg").textContent = t; $("msg").className = "msg " + (cls || ""); }
+function fname() {
+  const who = (state.reviewer || "reviewer").replace(/[^A-Za-z0-9_-]+/g, "_");
+  return `nodule_scores_${who}_${new Date().toISOString().slice(0, 10)}.csv`;
+}
+
+// Inside a Claude artifact the download goes through the viewer's `downloads` capability;
+// on a regular website (GitHub Pages) a plain browser download is used instead.
+let downloads = null;
+const inArtifact = !!window.claude?.use;
+(async () => {
+  if (!inArtifact) return;
+  try { downloads = await window.claude.use("downloads"); } catch (e) { downloads = null; }
+  if (!downloads) { $("dl").hidden = true; msg("Use Copy CSV to send your scores.", ""); }
+})();
+
+function browserDownload() {
+  const url = URL.createObjectURL(new Blob([csv()], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = fname();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  msg("CSV downloaded.", "ok");
+}
+
+$("dl").onclick = async () => {
+  if (!inArtifact) { browserDownload(); return; }
+  if (!downloads) return;
+  try {
+    const r = await downloads.save({ filename: fname(), data: csv() });
+    msg(r.status === "saved" ? "CSV saved." : "CSV sent.", "ok");
+  } catch (e) {
+    if (e && e.code === "declined") msg("Download cancelled.", "");
+    else { msg("Download isn't available here. Use Copy CSV instead.", "warn"); if (["unavailable", "not_granted", "capability_disabled", "capability_removed"].includes(e?.code)) $("dl").hidden = true; }
+  }
+};
+$("copy").onclick = async () => {
+  const text = csv();
+  try { await navigator.clipboard.writeText(text); msg("CSV copied. Paste it into an email or a .csv file.", "ok"); }
+  catch (e) { $("csvbox").hidden = false; $("csvbox").value = text; $("csvbox").select(); msg("Copy isn't allowed here: the CSV is selected below, press Ctrl/Cmd+C.", "warn"); }
+};
+$("show").onclick = () => { const box = $("csvbox"); box.hidden = !box.hidden; box.value = csv(); $("show").textContent = box.hidden ? "Show CSV" : "Hide CSV"; };
+$("clear").onclick = () => { $("confirm").hidden = false; };
+$("clearNo").onclick = () => { $("confirm").hidden = true; };
+$("clearYes").onclick = () => {
+  state = { reviewer: state.reviewer, current: 0, scores: {}, notes: {}, times: {} };
+  save(); $("confirm").hidden = true; msg("All scores deleted.", ""); go(0);
+};
+$("toggleAll").onclick = () => { showAll = !showAll; renderCard(); };
+$("reviewer").value = state.reviewer;
+$("reviewer").oninput = e => { state.reviewer = e.target.value.trim(); save(); };
+$("note").oninput = e => { state.notes[rid()] = e.target.value; save(); };
+$("prev").onclick = () => go(state.current - 1);
+$("next").onclick = () => go(state.current + 1);
+$("prompt").textContent = DATA.prompt;
+
+if (state.current >= DATA.reports.length) state.current = 0;
+renderList(); renderReport(); renderProgress();
+</script>
+
+</body>
+</html>
